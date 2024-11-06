@@ -1,6 +1,5 @@
 import "./style.css";
 
-//const app: HTMLDivElement = document.querySelector("#app")!;
 const gameName = "GeoCoin Game";
 document.title = gameName;
 
