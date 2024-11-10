@@ -38,13 +38,26 @@ const playerMarker = leaflet.marker(oakesClassroom);
 playerMarker.bindTooltip("It's a you, {userName}!");
 playerMarker.addTo(map);
 
-let playerInventory = 0;
+const playerInventory: Coin[] = [];
 const playerInventoryText = document.createElement("div");
 playerInventoryText.textContent = `Coins Collected: ${playerInventory}`;
 document.body.appendChild(playerInventoryText);
 
+// Container to display collected coins
+const playerInventoryList = document.createElement("div");
+document.body.appendChild(playerInventoryList);
+
 function updatePlayerInventory() {
-  playerInventoryText.textContent = `Coins Collected: ${playerInventory}`;
+  playerInventoryText.textContent =
+    `Coins Collected: ${playerInventory.length}`;
+  playerInventoryList.innerHTML = ""; // Clear the current list
+
+  // Display each collected coin in the inventory
+  playerInventory.forEach((coin) => {
+    const coinInfo = document.createElement("div");
+    coinInfo.textContent = `${coin.cell.i}:${coin.cell.j}#${coin.serial}`;
+    playerInventoryList.appendChild(coinInfo);
+  });
 }
 
 const gridMap = new Board(0.0001, 8);
@@ -73,11 +86,12 @@ interface Cache {
 function createCache() {
   const randomCellIndex = randomNum(0, visibleCells.length - 1);
   const selectedCell = visibleCells[randomCellIndex];
-
   const numCoins = randomNum(1, 3);
   const cache: Cache = { coins: [] };
+
+  // Initialize coins in the cache
   for (let i = 0; i < numCoins; i++) {
-    cache.coins.push({ cell: selectedCell, serial: i });
+    cache.coins.push({ cell: selectedCell, serial: i + 1 });
   }
 
   const bounds = gridMap.getCellBounds(selectedCell);
@@ -85,20 +99,24 @@ function createCache() {
   const cacheMarker = leaflet.marker(center);
 
   const container = document.createElement("div");
+  container.style.flexDirection = "column"; // Align buttons vertically
 
-  const coinCountText = document.createElement("div");
-  coinCountText.id = `coins-${randomCellIndex}`;
-  coinCountText.textContent = `Coins: ${cache.coins.length}`;
+  const cacheID = document.createElement("div");
+  cacheID.textContent = `Cache: ${selectedCell.i}:${selectedCell.j}`;
+  container.appendChild(cacheID);
 
-  container.appendChild(coinCountText);
-  container.appendChild(createCollectCoinButton(cache));
-  container.appendChild(createDropCoinButton(cache, selectedCell));
+  // Add collect buttons for each coin
+  cache.coins.forEach((coin) => {
+    const button = createCollectCoinButton(cache, coin, container);
+    container.appendChild(button);
+  });
+
+  // Add insert button
+  container.appendChild(createDropCoinButton(cache, container));
 
   cacheMarker.bindPopup(() => container);
 
   addEventListener("cache-updated", () => {
-    coinCountText.id = `coins-${randomCellIndex}`;
-    coinCountText.textContent = `Coins: ${cache.coins.length}`;
   });
 
   addEventListener("player-inventory-changed", () => {
@@ -108,31 +126,62 @@ function createCache() {
   cacheMarker.addTo(map);
 }
 
-function createCollectCoinButton(cache: Cache): HTMLButtonElement {
+function createCollectCoinButton(
+  cache: Cache,
+  coin: Coin,
+  container: HTMLElement,
+): HTMLElement {
+  const coinButtonData = document.createElement("div");
+  coinButtonData.style.display = "flex";
+  coinButtonData.style.flexDirection = "row"; // Align buttons vertically
+
+  const coinDataText = document.createElement("div");
+  coinDataText.textContent = `${coin.cell.i}:${coin.cell.j}#${coin.serial}`;
+
   const collectButton = document.createElement("button");
   collectButton.textContent = "Collect Coin";
+
   collectButton.addEventListener("click", () => {
-    if (cache.coins.length > 0) {
-      playerInventory++;
-      cache.coins.pop();
+    // Use find to check if the coin exists in cache.coins
+    if (
+      cache.coins.find((c) => c.cell === coin.cell && c.serial === coin.serial)
+    ) {
+      playerInventory.push(coin); // Add the collected coin to player inventory
+      cache.coins = cache.coins.filter((c) => c !== coin); // Remove the specific coin from the cache
+
+      // Update the DOM and remove the button
+      container.removeChild(coinButtonData);
       dispatchEvent(new Event("cache-updated"));
       dispatchEvent(new Event("player-inventory-changed"));
     }
   });
 
-  return collectButton;
+  coinButtonData.appendChild(coinDataText);
+  coinButtonData.appendChild(collectButton);
+
+  return coinButtonData;
 }
 
 function createDropCoinButton(
   cache: Cache,
-  selectedCell: Cell,
+  container: HTMLElement,
 ): HTMLButtonElement {
   const insertButton = document.createElement("button");
   insertButton.textContent = "Insert Coin";
+
   insertButton.addEventListener("click", () => {
-    if (playerInventory > 0) {
-      playerInventory--;
-      cache.coins.push({ cell: selectedCell, serial: cache.coins.length });
+    if (playerInventory.length > 0) {
+      const newCoin = playerInventory.pop()!; // Remove a coin from player inventory
+      cache.coins.push(newCoin);
+
+      // Add a new "Collect Coin" button to the container
+      const newCollectButton = createCollectCoinButton(
+        cache,
+        newCoin,
+        container,
+      );
+      container.insertBefore(newCollectButton, insertButton); // Add button above the insert button
+
       dispatchEvent(new Event("cache-updated"));
       dispatchEvent(new Event("player-inventory-changed"));
     }
