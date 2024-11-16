@@ -83,3 +83,17 @@ button:focus-visible {
     background-color: #f9f9f9;
   }
 }
+
+.bubble-icon {
+  font-size: 32px;
+  text-align: center;
+  line-height: 1;
+  background-color: rgb(203, 249, 255);
+  border-radius: 50%;
+  padding: 10px;
+  width: 60px;
+  height: 60px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
