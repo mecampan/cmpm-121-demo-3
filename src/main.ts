@@ -27,19 +27,44 @@ interface Memento<T> {
 }
 
 class Cache implements Memento<string> {
-  cell: Cell;
-  coins: Coin[];
+  private cell: Cell;
+  private coins: Coin[];
 
   constructor(cell: Cell, coins: Coin[]) {
     this.cell = cell;
     this.coins = coins;
   }
 
+  addCoin(coin: Coin): void {
+    this.coins.push(coin);
+    this.coins.sort((a, b) => a.serial - b.serial);
+  }
+
+  removeCoin(coin: Coin): void {
+    this.coins = this.coins.filter((c) => c !== coin);
+  }
+
+  removeAllCoins(): void {
+    this.coins.length = 0;
+  }
+
+  getOneCoin(): Readonly<Coin> {
+    return this.coins[this.coins.length - 1];
+  }
+
+  getCoins(): ReadonlyArray<Coin> {
+    return this.coins;
+  }
+
+  getCell(): Cell {
+    return this.cell;
+  }
+
   toMemento(): string {
     return JSON.stringify({ coins: this.coins });
   }
 
-  fromMemento(memento: string) {
+  fromMemento(memento: string): void {
     const state = JSON.parse(memento);
     this.coins = state.coins;
   }
@@ -81,7 +106,7 @@ playerMarker.addTo(map);
 const playerInventoryCache = new Cache({ i: -1, j: -1 }, []);
 const playerInventoryText = document.createElement("div");
 playerInventoryText.textContent =
-  `Inhaled ${playerInventoryCache.coins.length} Breaths of Air`;
+  `Inhaled ${playerInventoryCache.getCoins.length} Breaths of Air`;
 document.body.appendChild(playerInventoryText);
 
 const playerInventoryList = document.createElement("div");
@@ -89,9 +114,9 @@ document.body.appendChild(playerInventoryList);
 
 function updatePlayerInventory() {
   playerInventoryText.textContent =
-    `Inhaled ${playerInventoryCache.coins.length} Breaths of Air`;
+    `Inhaled ${playerInventoryCache.getCoins.length} Breaths of Air`;
   playerInventoryList.innerHTML = "";
-  playerInventoryCache.coins.forEach((coin) => {
+  playerInventoryCache.getCoins().forEach((coin: Coin) => {
     const coinInfo = document.createElement("div");
     coinInfo.textContent =
       `${AIR_EMOJI} ${coin.cell.i}:${coin.cell.j}#${coin.serial}`;
@@ -112,14 +137,16 @@ function updatePlayerInventory() {
 }
 
 // Map Cache ---------------------------------------//
+const tileWidth = 0.0001;
+const tileVisibilityRadius = 8;
+
 const cellCacheMap = new Map<string, string>();
 const visibleCacheMarkers = new Map<string, leaflet.Marker>();
-const gridMap = new Board(0.0001, 8);
+const gridMap = new Board(tileWidth, tileVisibilityRadius);
 
 function transferCoin(fromCache: Cache, toCache: Cache, coin: Coin) {
-  fromCache.coins = fromCache.coins.filter((c) => c !== coin);
-  toCache.coins.push(coin);
-  toCache.coins.sort((a, b) => a.serial - b.serial);
+  fromCache.removeCoin(coin);
+  toCache.addCoin(coin);
 }
 
 function updateVisibleCaches() {
@@ -198,7 +225,7 @@ function createCachePopup(cache: Cache): HTMLElement {
 
   // Cache ID (Static Display)
   const cacheID = document.createElement("div");
-  cacheID.textContent = `Air Pocket: ${cache.cell.i}:${cache.cell.j}`;
+  cacheID.textContent = `Air Pocket: ${cache.getCell().i}:${cache.getCell().j}`;
   container.appendChild(cacheID);
 
   // Collect Buttons Div
@@ -224,7 +251,7 @@ function createCachePopup(cache: Cache): HTMLElement {
 }
 
 function refreshCachePopup(cache: Cache) {
-  const cellKey = `${cache.cell.i},${cache.cell.j}`;
+  const cellKey = `${cache.getCell().i},${cache.getCell().j}`;
   const cacheMarker = visibleCacheMarkers.get(cellKey);
 
   if (cacheMarker) {
@@ -238,7 +265,7 @@ function createCollectButtons(cache: Cache, collectButtonsDiv: HTMLElement) {
   collectButtonsDiv.innerHTML = "";
 
   // Create a button for each coin in the cache
-  cache.coins.forEach((coin) => {
+  cache.getCoins().forEach((coin) => {
     const button = createCollectCoinButton(cache, coin);
     collectButtonsDiv.appendChild(button);
   });
@@ -258,7 +285,10 @@ function createCollectCoinButton(cache: Cache, coin: Coin): HTMLElement {
 
   collectButton.addEventListener("click", () => {
     transferCoin(cache, playerInventoryCache, coin);
-    cellCacheMap.set(`${cache.cell.i},${cache.cell.j}`, cache.toMemento());
+    cellCacheMap.set(
+      `${cache.getCell().i},${cache.getCell().j}`,
+      cache.toMemento(),
+    );
     refreshCachePopup(cache);
     updatePlayerInventory();
     saveCaches();
@@ -274,10 +304,16 @@ function createDropCoinButton(cache: Cache): HTMLButtonElement {
   insertButton.textContent = "Exhale";
 
   insertButton.addEventListener("click", () => {
-    if (playerInventoryCache.coins.length > 0) {
-      const coinToDrop = playerInventoryCache.coins.pop()!;
+    if (playerInventoryCache.getCoins().length > 0) {
+      const coinToDrop = playerInventoryCache.getOneCoin();
+
+      console.log(coinToDrop);
+
       transferCoin(playerInventoryCache, cache, coinToDrop);
-      cellCacheMap.set(`${cache.cell.i},${cache.cell.j}`, cache.toMemento());
+      cellCacheMap.set(
+        `${cache.getCell().i},${cache.getCell().j}`,
+        cache.toMemento(),
+      );
       refreshCachePopup(cache);
       updatePlayerInventory();
       saveCaches();
@@ -430,7 +466,7 @@ function clearPersistentData() {
   polyline.setLatLngs([]);
 
   // Clear player inventory
-  playerInventoryCache.coins = [];
+  playerInventoryCache.removeAllCoins();
   updatePlayerInventory();
 
   // Reinitialize caches and polyline
@@ -474,7 +510,10 @@ function loadCaches() {
 
       // Ensure cache is recreated using deterministic luck
       const recreatedCache = createCache(cell);
-      recreatedCache.coins = cache.coins; // Overwrite with stored coins if present
+      cache.removeAllCoins();
+      recreatedCache.getCoins().forEach((coin) => {
+        cache.addCoin(coin);
+      });
       cellCacheMap.set(key, recreatedCache.toMemento());
     });
   }
